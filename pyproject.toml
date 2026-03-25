@@ -1,0 +1,51 @@
+[project]
+name = "rbac"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = []
+
+[tool.uv]
+package = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+fix = false
+exclude = [".venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP", "I", "SIM", "C4", "RUF", "ANN", "N", "S", "T", "Q", "A", "R", "B9", "W", "PL", "ISC",
+    "PIE", "PGH", "TID", "COM", "RET", "PTH", "G", "FA", "ERA", "TRY", "RSE", "SLF", "EXE", "NPY", "PD", "PERF", "PYI",
+    "EM", "INP", "PT", "DTZ", "LOG", "BLE", "TCH", "FBT", "ASYNC", "TD"]
+ignore = [
+    "RUF001",
+    "TRY301",
+    "BLE001",
+    "TD002",
+    "TD003",
+]
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.File"]
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = "none"
+reportUnnecessaryIsInstance = false
+pythonVersion = "3.13"
+exclude = [
+    ".venv",
+    "**/__pycache__",
+]
+extraPaths = [
+    "src"
+]
+venvPath = "."
+venv = ".venv"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.408",
+    "ruff>=0.15.7",
+]
