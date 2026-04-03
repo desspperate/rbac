@@ -2,7 +2,24 @@
 name = "rbac"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "alembic>=1.18.4",
+    "asyncpg>=0.31.0",
+    "dishka>=1.9.1",
+    "fastapi>=0.135.2",
+    "greenlet>=3.3.2",
+    "gunicorn>=25.3.0",
+    "loguru>=0.7.3",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "uvicorn>=0.42.0",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.408",
+    "ruff>=0.15.7",
+]
 
 [tool.uv]
 package = true
@@ -28,6 +45,8 @@ ignore = [
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.File"]
 [tool.ruff.lint.flake8-type-checking]
 runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+[tool.ruff.lint.per-file-ignores]
+"alembic/*" = ["INP001"]
 
 [tool.pyright]
 typeCheckingMode = "strict"
@@ -43,9 +62,6 @@ extraPaths = [
 ]
 venvPath = "."
 venv = ".venv"
-
-[dependency-groups]
-dev = [
-    "pyright>=1.1.408",
-    "ruff>=0.15.7",
+executionEnvironments = [
+  { root = "src/rbac/di", reportUnknownVariableType = false },
 ]
