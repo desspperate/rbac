@@ -7,10 +7,10 @@ services:
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       POSTGRES_DB: ${PG_DB}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     volumes:
-      - postgres-vol:/var/lib/postgresql/data
+      - postgres-vol:/var/lib/postgresql/18/docker
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DB}" ]
       interval: 10s
@@ -24,7 +24,7 @@ services:
     image: eqalpha/keydb:latest
     command: keydb-server --requirepass ${KDB_PASSWORD}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
     volumes:
       - keydb-vol:/data
@@ -99,7 +99,7 @@ services:
     env_file:
       - .env
     ports:
-      - "3100:80"
+      - "127.0.0.1:3100:80"
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost/ping || exit 1" ]
