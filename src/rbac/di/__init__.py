@@ -3,8 +3,11 @@ from dishka import AsyncContainer, make_async_container
 from rbac.configs import RBACConfig
 
 from .kdb_provider import KDBProvider
+from .permission_provider import PermissionProvider
 from .pg_config_provider import PGConfigProvider
+from .role_provider import RoleProvider
 from .sqlalchemy_provider import SqlalchemyProvider
+from .user_provider import UserProvider
 
 
 def make_rbac_container(rbac_config_instance: RBACConfig) -> AsyncContainer:
@@ -12,5 +15,8 @@ def make_rbac_container(rbac_config_instance: RBACConfig) -> AsyncContainer:
         KDBProvider(),
         PGConfigProvider(),
         SqlalchemyProvider(),
+        RoleProvider(),
+        UserProvider(),
+        PermissionProvider(),
         context={RBACConfig: rbac_config_instance},
     )

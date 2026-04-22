@@ -15,8 +15,20 @@ class RBACError(Exception):
 
 
 class RBACUnexpectedError(RBACError):
-    code = "UNEXPECTED_ERROR"
-    message = "Unexpected internal error"
+    code: str = "UNEXPECTED_ERROR"
+    message: str = "Unexpected internal error"
+
+    def __init__(
+            self,
+            code: str = "UNEXPECTED_ERROR",
+            message: str = "Unexpected internal error",
+    ) -> None:
+        self.code = code
+        self.message = message
+        super().__init__(
+            code=code,
+            message=message,
+        )
 
 
 class RBACConflictError(RBACError):

@@ -8,7 +8,12 @@ from loguru import logger
 from rbac.configs import KDBConfig, PGConfig, RBACConfig
 from rbac.di import make_rbac_container
 from rbac.error_handlers import register_error_handler
-from rbac.routers import ping_pong_router
+from rbac.routers import (
+    permission_router,
+    ping_pong_router,
+    role_router,
+    user_router,
+)
 from rbac.utils import print_pd_settings
 
 
@@ -41,6 +46,9 @@ def create_app() -> FastAPI:
     fastapi_integration.setup_dishka(container=container, app=application)
 
     application.include_router(ping_pong_router)
+    application.include_router(permission_router)
+    application.include_router(role_router)
+    application.include_router(user_router)
 
     register_error_handler(application)
 

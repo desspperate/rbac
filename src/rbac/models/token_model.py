@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String
+from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from rbac.constants import RBACConstants
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class Token(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(RBACConstants.HASH_LEN), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(RBACConstants.HASH_LEN), nullable=False)
     token_type: Mapped[TokenTypeEnum] = mapped_column(
         Enum(TokenTypeEnum, native_enum=False),
         nullable=False,
@@ -29,4 +29,13 @@ class Token(Base):
     user: Mapped["User"] = relationship(
         "User",
         back_populates="tokens",
+    )
+
+    UQ_TOKEN_TOKEN_HASH = "uq_token_token_hash"  # noqa: S105
+
+    __table_args__ = (
+        UniqueConstraint(
+            "token_hash",
+            name=UQ_TOKEN_TOKEN_HASH,
+        ),
     )
