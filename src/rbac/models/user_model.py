@@ -16,7 +16,7 @@ class User(Base):
         nullable=False,
     )
     password_hash: Mapped[str] = mapped_column(
-        String(RBACConstants.HASH_LEN),
+        String(RBACConstants.HASH_MAX_LEN),
         nullable=False,
     )
 

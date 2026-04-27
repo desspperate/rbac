@@ -1,5 +1,3 @@
-import hashlib
-import os
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
@@ -19,19 +17,14 @@ from rbac.errors import (
     UnhandledIntegrityError,
     UserNotFoundError,
     UserPasswordNullError,
+    UserStillReferencedError,
     UserUsernameAlreadyExistError,
     UserUsernameInvalidError,
     UserUsernameNullError,
 )
-from rbac.models import User, UserPermission, UserRole
-from rbac.repositories import UserRepository
-from rbac.utils import FK_DETAIL_PATTERN, UNSET, Unset, get_asyncpg_error
-
-
-def _hash_password(password: str) -> str:
-    salt = os.urandom(16)
-    key = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=2**5)
-    return salt.hex() + ":" + key.hex()
+from rbac.models import Token, User, UserPermission, UserRole
+from rbac.repositories import UserPermissionRepository, UserRepository, UserRoleRepository
+from rbac.utils import UNSET, HandleIntegrityHelpers, Unset, crypto_hash, get_asyncpg_error
 
 
 @asynccontextmanager
@@ -43,19 +36,28 @@ async def handle_user_integrity(username: str | None) -> AsyncIterator[None]:
         if asyncpg_error is None:
             raise UnhandledIntegrityError from e
 
-        if isinstance(asyncpg_error, CheckViolationError | UniqueViolationError):
-            constraint = getattr(asyncpg_error, "constraint_name", None)
-            if not isinstance(constraint, str):
-                raise UnhandledIntegrityError from e
+        if isinstance(asyncpg_error, CheckViolationError | UniqueViolationError | ForeignKeyViolationError):
+            constraint = HandleIntegrityHelpers.get_constraint(asyncpg_error, e)
 
             if constraint == User.UQ_USER_USERNAME and isinstance(username, str):
                 raise UserUsernameAlreadyExistError(username=username) from e
             if constraint == User.CK_USER_USERNAME_PATTERN and isinstance(username, str):
                 raise UserUsernameInvalidError(username=username, pattern=RBACConstants.USER_USERNAME_PATTERN) from e
+
+            if isinstance(asyncpg_error, ForeignKeyViolationError):
+                _, failed_value, referrer_table = HandleIntegrityHelpers.get_details(asyncpg_error, e)
+
+                if constraint in {
+                    Token.FK_TOKEN_USER_ID,
+                    UserRole.FK_USER_ROLE_USER_ID,
+                    UserPermission.FK_USER_PERMISSION_USER_ID,
+                }:
+                    raise UserStillReferencedError(
+                        user_id=failed_value,
+                        related_object_type=referrer_table,
+                    ) from e
         elif isinstance(asyncpg_error, NotNullViolationError):
-            column = getattr(asyncpg_error, "column_name", None)
-            if not isinstance(column, str):
-                raise UnhandledIntegrityError from e
+            column = HandleIntegrityHelpers.get_column(asyncpg_error, e)
 
             if column == "username":
                 raise UserUsernameNullError from e
@@ -74,21 +76,10 @@ async def handle_user_role_integrity() -> AsyncIterator[None]:
         if asyncpg_error is None:
             raise UnhandledIntegrityError from e
 
-        constraint = getattr(asyncpg_error, "constraint_name", None)
-        if not isinstance(constraint, str):
-            raise UnhandledIntegrityError from e
+        constraint = HandleIntegrityHelpers.get_constraint(asyncpg_error, e)
 
         if isinstance(asyncpg_error, ForeignKeyViolationError):
-            detail = getattr(asyncpg_error, "detail", "")
-            failed_value = None
-            match = FK_DETAIL_PATTERN.search(detail)
-            if match:
-                try:
-                    failed_value = int(match.group(2))
-                except (ValueError, TypeError):
-                    raise UnhandledIntegrityError from e
-            if not isinstance(failed_value, int):
-                raise UnhandledIntegrityError from e
+            _, failed_value, _ = HandleIntegrityHelpers.get_details(asyncpg_error, e)
 
             if constraint == UserRole.FK_USER_ROLE_USER_ID:
                 raise UserNotFoundError(user_id=failed_value) from e
@@ -107,21 +98,10 @@ async def handle_user_permission_integrity() -> AsyncIterator[None]:
         if asyncpg_error is None:
             raise UnhandledIntegrityError from e
 
-        constraint = getattr(asyncpg_error, "constraint_name", None)
-        if not isinstance(constraint, str):
-            raise UnhandledIntegrityError from e
+        constraint = HandleIntegrityHelpers.get_constraint(asyncpg_error, e)
 
         if isinstance(asyncpg_error, ForeignKeyViolationError):
-            detail = getattr(asyncpg_error, "detail", "")
-            failed_value = None
-            match = FK_DETAIL_PATTERN.search(detail)
-            if match:
-                try:
-                    failed_value = int(match.group(2))
-                except ValueError:
-                    raise UnhandledIntegrityError from e
-            if not isinstance(failed_value, int):
-                raise UnhandledIntegrityError from e
+            _, failed_value, _ = HandleIntegrityHelpers.get_details(asyncpg_error, e)
 
             if constraint == UserPermission.FK_USER_PERMISSION_USER_ID:
                 raise UserNotFoundError(user_id=failed_value) from e
@@ -132,9 +112,17 @@ async def handle_user_permission_integrity() -> AsyncIterator[None]:
 
 
 class UserService:
-    def __init__(self, session: AsyncSession, user_repository: UserRepository) -> None:
+    def __init__(
+            self,
+            session: AsyncSession,
+            user_repository: UserRepository,
+            user_role_repository: UserRoleRepository,
+            user_permission_repository: UserPermissionRepository,
+    ) -> None:
         self.session = session
         self.user_repository = user_repository
+        self.user_role_repository = user_role_repository
+        self.user_permission_repository = user_permission_repository
 
     async def create_user(
             self,
@@ -142,7 +130,7 @@ class UserService:
             password: str,
     ) -> User:
         logger.info(f"Creating user: username='{username}'")
-        password_hash = _hash_password(password)
+        password_hash = crypto_hash(password)
         async with handle_user_integrity(username=username):
             user = await self.user_repository.create_user(
                 username=username,
@@ -152,7 +140,7 @@ class UserService:
         logger.info(f"User created: {user.id}")
         return user
 
-    async def get_users(self, page: int, size: int) -> Sequence[User]:
+    async def get_users(self, page: int, size: int) -> tuple[Sequence[User], int]:
         logger.info(f"Getting users for page: {page}, size: {size}")
         return await self.user_repository.list_all(skip=(page - 1) * size, limit=size)
 
@@ -164,7 +152,8 @@ class UserService:
 
     async def delete_user(self, user_id: int) -> None:
         logger.info(f"Deleting user: {user_id}")
-        deleted = await self.user_repository.delete_by_id(user_id)
+        async with handle_user_integrity(username=None):
+            deleted = await self.user_repository.delete_by_id(user_id)
         if not deleted:
             raise UserNotFoundError(user_id=user_id)
         await self.session.commit()
@@ -182,7 +171,7 @@ class UserService:
         if not isinstance(username, Unset):
             user.username = username
         if not isinstance(password, Unset):
-            user.password_hash = _hash_password(password)
+            user.password_hash = crypto_hash(password)
 
         async with handle_user_integrity(username=username if not isinstance(username, Unset) else None):
             await self.session.commit()
@@ -198,17 +187,21 @@ class UserService:
     ) -> Sequence[UserRole]:
         logger.info(f"Updating roles for user: {user_id}")
         async with handle_user_role_integrity():
-            not_deleted = await self.user_repository.remove_roles(user_id=user_id, remove_ids=remove_ids)
+            not_deleted = await self.user_role_repository.remove_user_roles(user_id=user_id, remove_ids=remove_ids)
             if not_deleted:
                 raise RolesNotFoundError(role_ids=not_deleted)
-            await self.user_repository.upsert_roles(set_data=set_data)
+            await self.user_role_repository.upsert_user_roles(set_data=set_data)
             await self.session.commit()
         logger.info(f"Roles updated for user: {user_id}")
-        return await self.user_repository.get_roles(user_id=user_id)
+        return await self.user_role_repository.get_user_roles(user_id=user_id)
 
-    async def get_roles(self, user_id: int, page: int, size: int) -> Sequence[UserRole]:
+    async def get_roles(self, user_id: int, page: int, size: int) -> tuple[Sequence[UserRole], int]:
         logger.info(f"Getting roles for user: {user_id}, page: {page}, size: {size}")
-        return await self.user_repository.list_roles(user_id=user_id, skip=(page - 1) * size, limit=size)
+        return await self.user_role_repository.list_all(
+            skip=(page - 1) * size,
+            limit=size,
+            user_id=user_id,
+        )
 
     async def update_permissions(
             self,
@@ -218,14 +211,21 @@ class UserService:
     ) -> Sequence[UserPermission]:
         logger.info(f"Updating permissions for user: {user_id}")
         async with handle_user_permission_integrity():
-            not_deleted = await self.user_repository.remove_permissions(user_id=user_id, remove_ids=remove_ids)
+            not_deleted = await self.user_permission_repository.remove_user_permissions(
+                user_id=user_id,
+                remove_ids=remove_ids,
+            )
             if not_deleted:
                 raise PermissionsNotFoundError(permission_ids=not_deleted)
-            await self.user_repository.upsert_permissions(set_data=set_data)
+            await self.user_permission_repository.upsert_user_permissions(set_data=set_data)
             await self.session.commit()
         logger.info(f"Permissions updated for user: {user_id}")
-        return await self.user_repository.get_permissions(user_id=user_id)
+        return await self.user_permission_repository.get_user_permissions(user_id=user_id)
 
-    async def get_permissions(self, user_id: int, page: int, size: int) -> Sequence[UserPermission]:
+    async def get_permissions(self, user_id: int, page: int, size: int) -> tuple[Sequence[UserPermission], int]:
         logger.info(f"Getting permissions for user: {user_id}, page: {page}, size: {size}")
-        return await self.user_repository.list_permissions(user_id=user_id, skip=(page - 1) * size, limit=size)
+        return await self.user_permission_repository.list_all(
+            skip=(page - 1) * size,
+            limit=size,
+            user_id=user_id,
+        )

@@ -12,7 +12,7 @@ class RoleError(Exception):
 
 
 class RoleNotFoundError(RoleError, RBACNotFoundError):
-    def __init__(self, role_id: int) -> None:
+    def __init__(self, role_id: int | str) -> None:
         self.role_id = role_id
         super().__init__(
             code="ROLE_NOT_FOUND",
@@ -44,8 +44,20 @@ class RolesNotFoundError(RoleError, RBACNotFoundError):
 class RoleNameNullError(RoleError, RBACValidationError):
     def __init__(self) -> None:
         super().__init__(
-            code="ROLE_NAME_NOT_NULLABLE",
+            code="ROLE_NAME_NULL",
             message="Role name is not nullable",
+        )
+
+
+class RoleStillReferencedError(RoleError, RBACConflictError):
+    def __init__(self, role_id: int | str, related_object_type: str) -> None:
+        super().__init__(
+            code="ROLE_STILL_REFERENCED",
+            message=f"Role {role_id} not deleted. Still referenced by {related_object_type} table",
+            details={
+                "role_id": role_id,
+                "referrer_name": related_object_type,
+            },
         )
 
 

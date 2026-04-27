@@ -32,9 +32,12 @@ async def get_users(
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> UsersRead:
     with logger.contextualize(user_id=user_id):
-        users = await user_service.get_users(page=page, size=size)
+        users, total = await user_service.get_users(page=page, size=size)
         return UsersRead.model_validate({
             "users": users,
+            "page": page,
+            "page_size": size,
+            "total": total,
         })
 
 
@@ -95,7 +98,7 @@ async def get_user_roles(
         size: int = Query(default=100, ge=1, le=100),
 ) -> UserRoles:
     with logger.contextualize(user_id=user_id):
-        roles = await user_service.get_roles(
+        roles, total = await user_service.get_roles(
             user_id=target_user_id,
             page=page,
             size=size,
@@ -103,6 +106,9 @@ async def get_user_roles(
         return UserRoles.model_validate({
             "user_id": target_user_id,
             "roles": roles,
+            "total": total,
+            "page": page,
+            "page_size": size,
         })
 
 
@@ -156,7 +162,7 @@ async def get_user_permissions(
         size: int = Query(default=100, ge=1, le=100),
 ) -> UserPermissions:
     with logger.contextualize(user_id=user_id):
-        permissions = await user_service.get_permissions(
+        permissions, total = await user_service.get_permissions(
             user_id=target_user_id,
             page=page,
             size=size,
@@ -164,6 +170,9 @@ async def get_user_permissions(
         return UserPermissions.model_validate({
             "user_id": target_user_id,
             "permissions": permissions,
+            "page": page,
+            "page_size": size,
+            "total": total,
         })
 
 

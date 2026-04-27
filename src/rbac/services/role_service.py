@@ -16,11 +16,12 @@ from rbac.errors import (
     RoleNameInvalidError,
     RoleNameNullError,
     RoleNotFoundError,
+    RoleStillReferencedError,
     UnhandledIntegrityError,
 )
-from rbac.models import Role, RolePermission
-from rbac.repositories import RoleRepository
-from rbac.utils import FK_DETAIL_PATTERN, UNSET, Unset, get_asyncpg_error
+from rbac.models import Role, RolePermission, UserRole
+from rbac.repositories import RolePermissionRepository, RoleRepository
+from rbac.utils import UNSET, HandleIntegrityHelpers, Unset, get_asyncpg_error
 
 
 @asynccontextmanager
@@ -32,10 +33,8 @@ async def handle_role_integrity(name: str | None, description: str | None) -> As
         if asyncpg_error is None:
             raise UnhandledIntegrityError from e
 
-        if isinstance(asyncpg_error, UniqueViolationError | CheckViolationError):
-            constraint = getattr(asyncpg_error, "constraint_name", None)
-            if not isinstance(constraint, str):
-                raise UnhandledIntegrityError from e
+        if isinstance(asyncpg_error, UniqueViolationError | CheckViolationError | ForeignKeyViolationError):
+            constraint = HandleIntegrityHelpers.get_constraint(asyncpg_error, e)
 
             if constraint == Role.UQ_ROLE_NAME and isinstance(name, str):
                 raise RoleNameAlreadyExistError(name=name) from e
@@ -46,10 +45,20 @@ async def handle_role_integrity(name: str | None, description: str | None) -> As
                     description=description,
                     pattern=RBACConstants.DESCRIPTION_PATTERN,
                 ) from e
+
+            if isinstance(asyncpg_error, ForeignKeyViolationError):
+                _, failed_value, referrer_table = HandleIntegrityHelpers.get_details(asyncpg_error, e)
+
+                if constraint in {
+                    RolePermission.FK_ROLE_PERMISSION_ROLE_ID,
+                    UserRole.FK_USER_ROLE_ROLE_ID,
+                }:
+                    raise RoleStillReferencedError(
+                        role_id=failed_value,
+                        related_object_type=referrer_table,
+                    ) from e
         elif isinstance(asyncpg_error, NotNullViolationError):
-            column = getattr(asyncpg_error, "column", None)
-            if not isinstance(column, str):
-                raise UnhandledIntegrityError from e
+            column = HandleIntegrityHelpers.get_column(asyncpg_error, e)
 
             if column == "name":
                 raise RoleNameNullError from e
@@ -66,21 +75,10 @@ async def handle_role_permission_integrity() -> AsyncIterator[None]:
         if asyncpg_error is None:
             raise UnhandledIntegrityError from e
 
-        constraint = getattr(asyncpg_error, "constraint_name", None)
-        if not isinstance(constraint, str):
-            raise UnhandledIntegrityError from e
+        constraint = HandleIntegrityHelpers.get_constraint(asyncpg_error, e)
 
         if isinstance(asyncpg_error, ForeignKeyViolationError):
-            detail = getattr(asyncpg_error, "detail", "")
-            failed_value = None
-            match = FK_DETAIL_PATTERN.search(detail)
-            if match:
-                try:
-                    failed_value = int(match.group(2))
-                except ValueError:
-                    raise UnhandledIntegrityError from e
-            if not isinstance(failed_value, int):
-                raise UnhandledIntegrityError from e
+            _, failed_value, _ = HandleIntegrityHelpers.get_details(asyncpg_error, e)
 
             if constraint == RolePermission.FK_ROLE_PERMISSION_ROLE_ID:
                 raise RoleNotFoundError(role_id=failed_value) from e
@@ -91,11 +89,17 @@ async def handle_role_permission_integrity() -> AsyncIterator[None]:
 
 
 class RoleService:
-    def __init__(self, session: AsyncSession, role_repository: RoleRepository) -> None:
+    def __init__(
+            self,
+            session: AsyncSession,
+            role_repository: RoleRepository,
+            role_permission_repository: RolePermissionRepository,
+    ) -> None:
         self.session = session
         self.role_repository = role_repository
+        self.role_permission_repository = role_permission_repository
 
-    async def get_roles(self, page: int, size: int) -> Sequence[Role]:
+    async def get_roles(self, page: int, size: int) -> tuple[Sequence[Role], int]:
         logger.info(f"Getting roles for page: {page}, size: {size}")
         return await self.role_repository.list_all(skip=(page - 1) * size, limit=size)
 
@@ -112,13 +116,14 @@ class RoleService:
                 name=name,
                 description=description,
             )
-        await self.session.commit()
+            await self.session.commit()
         logger.info(f"Role created: '{name}'")
         return role
 
     async def delete_role(self, role_id: int) -> None:
         logger.info(f"Deleting role: {role_id}")
-        deleted = await self.role_repository.delete_by_id(role_id)
+        async with handle_role_integrity(name=None, description=None):
+            deleted = await self.role_repository.delete_by_id(role_id)
         if not deleted:
             raise RoleNotFoundError(role_id=role_id)
         await self.session.commit()
@@ -131,11 +136,12 @@ class RoleService:
             description: str | Unset | None = UNSET,
     ) -> Role:
         logger.info(f"Updating role: {role_id}")
-        passed_args = locals()
         role = await self.get_role(role_id)
-        allowed_fields = {"name", "description"}
-        for field in allowed_fields:
-            value = passed_args.get(field)
+        allowed_fields = {
+            "name": name,
+            "description": description,
+        }
+        for field, value in allowed_fields.items():
             if not isinstance(value, Unset):
                 setattr(role, field, value)
         async with handle_role_integrity(name=role.name, description=role.description):
@@ -152,14 +158,21 @@ class RoleService:
     ) -> Sequence[RolePermission]:
         logger.info(f"Updating permissions for role: {role_id}")
         async with handle_role_permission_integrity():
-            not_deleted = await self.role_repository.remove_permissions(role_id=role_id, remove_ids=remove_ids)
+            not_deleted = await self.role_permission_repository.remove_role_permissions(
+                role_id=role_id,
+                remove_ids=remove_ids,
+            )
             if not_deleted:
                 raise PermissionsNotFoundError(permission_ids=not_deleted)
-            await self.role_repository.upsert_permissions(set_data=set_data)
+            await self.role_permission_repository.upsert_role_permissions(set_data=set_data)
             await self.session.commit()
         logger.info(f"Permissions updated for role: {role_id}")
-        return await self.role_repository.get_permissions(role_id=role_id)
+        return await self.role_permission_repository.get_role_permissions(role_id=role_id)
 
-    async def get_permissions(self, role_id: int, page: int, size: int) -> Sequence[RolePermission]:
+    async def get_permissions(self, role_id: int, page: int, size: int) -> tuple[Sequence[RolePermission], int]:
         logger.info(f"Getting permissions for role: {role_id}, page: {page}, size: {size}")
-        return await self.role_repository.list_permissions(role_id=role_id, skip=(page - 1) * size, limit=size)
+        return await self.role_permission_repository.list_all(
+            skip=(page - 1) * size,
+            limit=size,
+            role_id=role_id,
+        )

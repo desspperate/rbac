@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: 369ac2b06c69
+Revision ID: 96852f4cc5fe
 Revises:
-Create Date: 2026-04-22 15:00:22.639605
+Create Date: 2026-04-27 13:10:25.900159
 
 """
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "369ac2b06c69"
+revision: str = "96852f4cc5fe"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -47,7 +47,7 @@ def upgrade() -> None:
     )
     op.create_table("users",
     sa.Column("username", sa.String(length=32), nullable=False),
-    sa.Column("password_hash", sa.String(length=97), nullable=False),
+    sa.Column("password_hash", sa.String(length=128), nullable=False),
     sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
@@ -69,7 +69,7 @@ def upgrade() -> None:
     )
     op.create_table("tokens",
     sa.Column("user_id", sa.Integer(), nullable=False),
-    sa.Column("token_hash", sa.String(length=97), nullable=False),
+    sa.Column("token_hash", sa.String(length=128), nullable=False),
     sa.Column("token_type", sa.Enum("REFRESH", "ACCESS", name="tokentypeenum", native_enum=False), nullable=False),
     sa.Column("forced_status", sa.Enum("REVOKED_BY_OWNER", "REVOKED_BY_ADMIN", name="forcedtokenstatusenum",
                                        native_enum=False), nullable=True),
@@ -77,7 +77,7 @@ def upgrade() -> None:
     sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
     sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
-    sa.ForeignKeyConstraint(["user_id"], ["users.id"] ),
+    sa.ForeignKeyConstraint(["user_id"], ["users.id"], name="fk_token_user_id"),
     sa.PrimaryKeyConstraint("id"),
     sa.UniqueConstraint("token_hash", name="uq_token_token_hash"),
     )

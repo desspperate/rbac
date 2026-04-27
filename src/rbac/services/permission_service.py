@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
+from asyncpg import ForeignKeyViolationError
 from asyncpg.exceptions import CheckViolationError, NotNullViolationError, UniqueViolationError
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
@@ -10,14 +11,15 @@ from rbac.constants import RBACConstants
 from rbac.errors import (
     PermissionCodenameConflictError,
     PermissionCodenameInvalidError,
-    PermissionCodenameNotNullError,
+    PermissionCodenameNullError,
     PermissionDescriptionInvalidError,
     PermissionNotFoundError,
     UnhandledIntegrityError,
 )
-from rbac.models import Permission
+from rbac.errors.permission_errors import PermissionStillReferencedError
+from rbac.models import Permission, RolePermission, UserPermission
 from rbac.repositories import PermissionRepository
-from rbac.utils import UNSET, Unset, get_asyncpg_error
+from rbac.utils import UNSET, HandleIntegrityHelpers, Unset, get_asyncpg_error
 
 
 @asynccontextmanager
@@ -29,10 +31,8 @@ async def handle_permission_integrity(codename: str | None, description: str | N
         if asyncpg_error is None:
             raise UnhandledIntegrityError from e
 
-        if isinstance(asyncpg_error, CheckViolationError | UniqueViolationError):
-            constraint = getattr(asyncpg_error, "constraint_name", None)
-            if not isinstance(constraint, str):
-                raise UnhandledIntegrityError from e
+        if isinstance(asyncpg_error, CheckViolationError | UniqueViolationError | ForeignKeyViolationError):
+            constraint = HandleIntegrityHelpers.get_constraint(asyncpg_error, e)
 
             if constraint == Permission.CK_PERMISSION_CODENAME_PATTERN and isinstance(codename, str):
                 raise PermissionCodenameInvalidError(
@@ -46,13 +46,23 @@ async def handle_permission_integrity(codename: str | None, description: str | N
                 ) from e
             if constraint == Permission.UQ_PERMISSION_CODENAME and isinstance(codename, str):
                 raise PermissionCodenameConflictError(codename=codename) from e
+
+            if isinstance(asyncpg_error, ForeignKeyViolationError):
+                _, failed_value, referrer_table = HandleIntegrityHelpers.get_details(asyncpg_error, e)
+
+                if constraint in {
+                    UserPermission.FK_USER_PERMISSION_PERMISSION_ID,
+                    RolePermission.FK_ROLE_PERMISSION_PERMISSION_ID,
+                }:
+                     raise PermissionStillReferencedError(
+                        permission_id=failed_value,
+                        related_object_type=referrer_table,
+                    ) from e
         elif isinstance(asyncpg_error, NotNullViolationError):
-            column = getattr(asyncpg_error, "column_name", None)
-            if not isinstance(column, str):
-                raise UnhandledIntegrityError from e
+            column = HandleIntegrityHelpers.get_column(asyncpg_error, e)
 
             if column == "codename":
-                raise PermissionCodenameNotNullError from e
+                raise PermissionCodenameNullError from e
 
         raise UnhandledIntegrityError from e
 
@@ -77,7 +87,7 @@ class PermissionService:
         logger.info(f"Permission created: '{codename}'")
         return permission
 
-    async def get_permissions(self, page: int, size: int) -> Sequence[Permission]:
+    async def get_permissions(self, page: int, size: int) -> tuple[Sequence[Permission], int]:
         logger.info(f"Getting permissions for page: {page}, size: {size}")
         return await self.permission_repository.list_all(skip=(page - 1) * size, limit=size)
 
@@ -89,7 +99,8 @@ class PermissionService:
 
     async def delete_permission(self, permission_id: int) -> None:
         logger.info(f"Deleting permission: {permission_id}")
-        deleted = await self.permission_repository.delete_by_id(permission_id)
+        async with handle_permission_integrity(codename=None, description=None):
+            deleted = await self.permission_repository.delete_by_id(permission_id)
         if not deleted:
             raise PermissionNotFoundError(permission_id=permission_id)
         await self.session.commit()
@@ -102,11 +113,12 @@ class PermissionService:
             description: str | Unset | None = UNSET,
     ) -> Permission:
         logger.info(f"Updating permission: {permission_id}")
-        passed_args = locals()
         permission = await self.get_permission(permission_id)
-        allowed_fields = {"codename", "description"}
-        for field in allowed_fields:
-            value = passed_args.get(field)
+        allowed_fields = {
+            "codename": codename,
+            "description": description,
+        }
+        for field, value in allowed_fields.items():
             if not isinstance(value, Unset):
                 setattr(permission, field, value)
         async with handle_permission_integrity(codename=permission.codename, description=permission.description):

@@ -12,6 +12,7 @@ from rbac.routers import (
     permission_router,
     ping_pong_router,
     role_router,
+    token_router,
     user_router,
 )
 from rbac.utils import print_pd_settings
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     application.include_router(permission_router)
     application.include_router(role_router)
     application.include_router(user_router)
+    application.include_router(token_router)
 
     register_error_handler(application)
 

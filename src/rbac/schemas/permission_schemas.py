@@ -38,10 +38,13 @@ class PermissionUpdate(BaseModel):
 class PermissionRead(PermissionBase):
     id: int
     created_at: datetime
-    updated_at: datetime | None = None
+    updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class PermissionsRead(BaseModel):
     permissions: Sequence[PermissionRead]
+    page: int
+    page_size: int
+    total: int

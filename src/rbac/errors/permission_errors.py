@@ -8,7 +8,7 @@ class BasePermissionError(Exception):
 
 
 class PermissionNotFoundError(BasePermissionError, RBACNotFoundError):
-    def __init__(self, permission_id: int) -> None:
+    def __init__(self, permission_id: int | str) -> None:
         self.permission_id = permission_id
         super().__init__(
             code="PERMISSION_NOT_FOUND",
@@ -48,11 +48,23 @@ class PermissionCodenameInvalidError(BasePermissionError, RBACValidationError):
         )
 
 
-class PermissionCodenameNotNullError(BasePermissionError, RBACValidationError):
+class PermissionCodenameNullError(BasePermissionError, RBACValidationError):
     def __init__(self) -> None:
         super().__init__(
-            code="PERMISSION_CODENAME_NOT_NULL",
+            code="PERMISSION_CODENAME_NULL",
             message="Permission codename not nullable",
+        )
+
+
+class PermissionStillReferencedError(RBACConflictError):
+    def __init__(self, permission_id: int | str, related_object_type: str) -> None:
+        super().__init__(
+            code="ROLE_STILL_REFERENCED",
+            message=f"Permission {permission_id} not deleted. Still referenced by {related_object_type} table",
+            details={
+                "permission_id": permission_id,
+                "referrer_name": related_object_type,
+            },
         )
 
 
@@ -64,4 +76,14 @@ class PermissionDescriptionInvalidError(BasePermissionError, RBACValidationError
             code="PERMISSION_DESCRIPTION_INVALID",
             message=f"Permission description '{description}' is invalid. Description should match pattern: '{pattern}'",
             details={"description": description, "pattern": pattern},
+        )
+
+
+class PermissionNotDeletedError(RBACConflictError):
+    def __init__(self, permission_id: int) -> None:
+        self.permission_id = permission_id
+        super().__init__(
+            code="PERMISSION_NOT_DELETED",
+            message=f"Permission {permission_id} not deleted",
+            details={"permission_id": permission_id},
         )

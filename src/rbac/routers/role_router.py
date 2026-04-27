@@ -23,9 +23,12 @@ async def get_roles(
         size: int = Query(default=100, ge=1, le=100),
 ) -> RolesRead:
     with logger.contextualize(user_id=user_id):
-        roles = await role_service.get_roles(page=page, size=size)
+        roles, total = await role_service.get_roles(page=page, size=size)
         return RolesRead.model_validate({
             "roles": roles,
+            "page": page,
+            "page_size": size,
+            "total": total,
         })
 
 
@@ -86,7 +89,7 @@ async def get_role_permissions(
         size: int = Query(default=100, ge=1, le=100),
 ) -> RolePermissions:
     with logger.contextualize(user_id=user_id):
-        permissions = await role_service.get_permissions(
+        permissions, total = await role_service.get_permissions(
             role_id=role_id,
             page=page,
             size=size,
@@ -94,6 +97,9 @@ async def get_role_permissions(
         return RolePermissions.model_validate({
             "role_id": role_id,
             "permissions": permissions,
+            "page": page,
+            "page_size": size,
+            "total": total,
         })
 
 

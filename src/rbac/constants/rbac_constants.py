@@ -1,6 +1,7 @@
 class RBACConstants:
+    TOKEN_LENGTH = 64
     USER_USERNAME_MAX_LEN = 32
-    HASH_LEN = 97
+    HASH_MAX_LEN = 128
     ROLE_NAME_PATTERN = r"^[a-z]+(_[a-z]+)*$"
     PERMISSION_CODENAME_PATTERN = r"^[a-z]+(\.[a-z]+)*$"
     USER_USERNAME_PATTERN = r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$"

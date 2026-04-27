@@ -1,6 +1,6 @@
-from collections.abc import Sequence
+from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rbac.database import Base
@@ -16,15 +16,32 @@ class BaseRepository[ModelType: Base]:
     async def get_by_id(self, obj_id: int) -> ModelType | None:
         return await self.session.get(self.model, obj_id)
 
-    async def list_all(self, skip: int = 0, limit: int = 100) -> Sequence[ModelType]:
+    async def list_all(
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            **filters: str | bool | float | datetime |  None,
+    ) -> tuple[list[ModelType], int]:
         statement = (
             select(self.model)
+            .filter_by(**filters)
             .offset(skip)
             .limit(limit)
             .order_by(self.model.id)
         )
+        count_statement = (
+            select(func.count())
+            .select_from(self.model)
+            .filter_by(**filters)
+        )
+
         result = await self.session.execute(statement)
-        return result.scalars().all()
+        count_result = await self.session.execute(count_statement)
+
+        items = list(result.scalars().all())
+        total = count_result.scalar() or 0
+
+        return items, total
 
     def add(self, db_obj: ModelType) -> None:
         self.session.add(db_obj)

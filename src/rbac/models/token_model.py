@@ -13,13 +13,15 @@ if TYPE_CHECKING:
 
 
 class Token(Base):
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    token_hash: Mapped[str] = mapped_column(String(RBACConstants.HASH_LEN), nullable=False)
+    FK_TOKEN_USER_ID = "fk_token_user_id"  # noqa: S105
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", name=FK_TOKEN_USER_ID), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(RBACConstants.HASH_MAX_LEN), nullable=False)
     token_type: Mapped[TokenTypeEnum] = mapped_column(
         Enum(TokenTypeEnum, native_enum=False),
         nullable=False,
     )
-    forced_status: Mapped[ForcedTokenStatusEnum] = mapped_column(
+    forced_status: Mapped[ForcedTokenStatusEnum | None] = mapped_column(
         Enum(ForcedTokenStatusEnum, native_enum=False),
         nullable=True,
         default=None,

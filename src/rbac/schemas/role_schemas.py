@@ -38,13 +38,16 @@ class RoleUpdate(BaseModel):
 class RoleRead(RoleBase):
     id: int
     created_at: datetime
-    updated_at: datetime | None = None
+    updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class RolesRead(BaseModel):
     roles: Sequence[RoleRead]
+    page: int
+    page_size: int
+    total: int
 
 
 class RolePermissionBase(BaseModel):
@@ -57,6 +60,9 @@ class RolePermissionBase(BaseModel):
 class RolePermissions(BaseModel):
     role_id: int
     permissions: Sequence[RolePermissionBase]
+    page: int | None = None
+    page_size: int | None = None
+    total: int | None = None
 
 
 class RolePermissionUpdate(RolePermissionBase):

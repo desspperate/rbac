@@ -17,12 +17,24 @@ class UserUsernameInvalidError(UserError, RBACValidationError):
 
 
 class UserNotFoundError(UserError, RBACNotFoundError):
-    def __init__(self, user_id: int) -> None:
+    def __init__(self, user_id: int | str) -> None:
         self.user_id = user_id
         super().__init__(
             code="USER_NOT_FOUND",
             message=f"User {user_id} not found",
             details={"user_id": user_id},
+        )
+
+
+class UserStillReferencedError(UserError, RBACConflictError):
+    def __init__(self, user_id: int | str, related_object_type: str) -> None:
+        super().__init__(
+            code="USER_STILL_REFERENCED",
+            message=f"User {user_id} not deleted. Still referenced by {related_object_type} table",
+            details={
+                "user_id": user_id,
+                "referrer_name": related_object_type,
+            },
         )
 
 
@@ -67,7 +79,7 @@ class UserPermissionsUpdateIntersectingDeltaError(UserError, RBACValidationError
 class UserUsernameNullError(UserError, RBACValidationError):
     def __init__(self) -> None:
         super().__init__(
-            code="USER_USERNAME_NOT_NULLABLE",
+            code="USER_USERNAME_NULL",
             message="User username is not nullable",
         )
 
@@ -75,6 +87,6 @@ class UserUsernameNullError(UserError, RBACValidationError):
 class UserPasswordNullError(UserError, RBACUnexpectedError):
     def __init__(self) -> None:
         super().__init__(
-            code="USER_PASSWORD_HASH_NOT_NULLABLE",
+            code="USER_PASSWORD_HASH_NULL",
             message="User password_hash is not nullable",
         )

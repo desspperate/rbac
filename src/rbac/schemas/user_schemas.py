@@ -37,13 +37,16 @@ class UserUpdate(BaseModel):
 class UserRead(UserBase):
     id: int
     created_at: datetime
-    updated_at: datetime | None = None
+    updated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class UsersRead(BaseModel):
     users: Sequence[UserRead]
+    page: int
+    page_size: int
+    total: int
 
 
 class UserRoleBase(BaseModel):
@@ -56,6 +59,9 @@ class UserRoleBase(BaseModel):
 class UserRoles(BaseModel):
     user_id: int
     roles: Sequence[UserRoleBase]
+    page: int | None = None
+    page_size: int | None = None
+    total: int | None = None
 
 
 class UserRoleUpdate(UserRoleBase):
@@ -77,6 +83,9 @@ class UserPermissionBase(BaseModel):
 class UserPermissions(BaseModel):
     user_id: int
     permissions: Sequence[UserPermissionBase]
+    page: int | None = None
+    page_size: int | None = None
+    total: int | None = None
 
 
 class UserPermissionUpdate(UserPermissionBase):

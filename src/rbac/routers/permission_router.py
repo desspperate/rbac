@@ -21,9 +21,12 @@ async def get_permissions(
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> PermissionsRead:
     with logger.contextualize(user_id=user_id):
-        permissions = await permission_service.get_permissions(page=page, size=size)
+        permissions, total = await permission_service.get_permissions(page=page, size=size)
         return PermissionsRead.model_validate({
             "permissions": permissions,
+            "page": page,
+            "page_size": size,
+            "total": total,
         })
 
 
