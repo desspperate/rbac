@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
 
@@ -16,6 +17,18 @@ from rbac.errors import (
 
 
 def register_error_handler(app: FastAPI) -> None:
+    async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        if not isinstance(exc, RequestValidationError):
+            return await handle_all_errors(request=request, exc=exc)
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "code": "VALIDATION_ERROR",
+                "message": "Validation failed",
+                "details": exc.errors(),
+            },
+        )
+
     async def handle_all_errors(request: Request, exc: Exception) -> JSONResponse:
         if not isinstance(exc, RBACError):
             logger.bind(
@@ -63,4 +76,5 @@ def register_error_handler(app: FastAPI) -> None:
             },
         )
 
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, handle_all_errors)

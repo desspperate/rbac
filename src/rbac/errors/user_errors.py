@@ -1,3 +1,5 @@
+from typing import Any
+
 from .rbac_errors import RBACConflictError, RBACNotFoundError, RBACUnexpectedError, RBACValidationError
 
 
@@ -17,10 +19,31 @@ class UserUsernameInvalidError(UserError, RBACValidationError):
 
 
 class UserNotFoundError(UserError, RBACNotFoundError):
+    def __init__(
+            self,
+            message: str = "User not found",
+            details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code="USER_NOT_FOUND",
+            message=message,
+            details=details,
+        )
+
+
+class UserNotFoundByUsernameError(UserNotFoundError):
+    def __init__(self, username: str) -> None:
+        self.username = username
+        super().__init__(
+            message=f"User with username: {username} not found",
+            details={"username": username},
+        )
+
+
+class UserNotFoundByIDError(UserNotFoundError):
     def __init__(self, user_id: int | str) -> None:
         self.user_id = user_id
         super().__init__(
-            code="USER_NOT_FOUND",
             message=f"User {user_id} not found",
             details={"user_id": user_id},
         )

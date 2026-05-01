@@ -3,6 +3,7 @@ from dishka.integrations.fastapi import DishkaRoute
 from fastapi import APIRouter, Header, Query, status
 from loguru import logger
 
+from rbac.actions import UserAction
 from rbac.errors import UserPermissionsUpdateIntersectingDeltaError, UserRolesUpdateIntersectingDeltaError
 from rbac.models import User
 from rbac.schemas import (
@@ -15,7 +16,7 @@ from rbac.schemas import (
     UsersRead,
     UserUpdate,
 )
-from rbac.services import UserService
+from rbac.types import UserPatch, UserPermissionsPatch, UserPermissionType, UserRolesPatch, UserRoleType
 
 router = APIRouter(
     prefix="/users",
@@ -26,13 +27,13 @@ router = APIRouter(
 
 @router.get("", response_model=UsersRead)
 async def get_users(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         page: int = Query(default=1, ge=1),
         size: int = Query(default=100, ge=1, le=100),
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> UsersRead:
     with logger.contextualize(user_id=user_id):
-        users, total = await user_service.get_users(page=page, size=size)
+        users, total = await user_action.get_users(page=page, size=size)
         return UsersRead.model_validate({
             "users": users,
             "page": page,
@@ -43,22 +44,22 @@ async def get_users(
 
 @router.get("/{target_user_id}", response_model=UserRead)
 async def get_user(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> User:
     with logger.contextualize(user_id=user_id):
-        return await user_service.get_user(user_id=target_user_id)
+        return await user_action.get_user(user_id=target_user_id)
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def create_user(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         payload: UserCreate,
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> User:
     with logger.contextualize(user_id=user_id):
-        return await user_service.create_user(
+        return await user_action.create_user(
             username=payload.username,
             password=payload.password,
         )
@@ -66,39 +67,39 @@ async def create_user(
 
 @router.patch("/{target_user_id}", response_model=UserRead)
 async def patch_user(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         payload: UserUpdate,
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> User:
     with logger.contextualize(user_id=user_id):
-        update_data = payload.model_dump(exclude_unset=True)
-        return await user_service.update_user(
+        user_patch = UserPatch(**payload.model_dump(exclude_unset=True))
+        return await user_action.update_user(
             user_id=target_user_id,
-            **update_data,
+            user_patch=user_patch,
         )
 
 
 @router.delete("/{target_user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         user_id: int | None = Header(None, alias="X-User-Id"),
 ) -> None:
     with logger.contextualize(user_id=user_id):
-        await user_service.delete_user(user_id=target_user_id)
+        await user_action.delete_user(user_id=target_user_id)
 
 
 @router.get("/{target_user_id}/roles", response_model=UserRoles)
 async def get_user_roles(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         user_id: int | None = Header(None, alias="X-User-Id"),
         page: int = Query(default=1, ge=1),
         size: int = Query(default=100, ge=1, le=100),
 ) -> UserRoles:
     with logger.contextualize(user_id=user_id):
-        roles, total = await user_service.get_roles(
+        roles, total = await user_action.get_user_roles(
             user_id=target_user_id,
             page=page,
             size=size,
@@ -114,7 +115,7 @@ async def get_user_roles(
 
 @router.patch("/{target_user_id}/roles", response_model=UserRoles)
 async def patch_user_roles(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         payload: UserRolesUpdate,
         user_id: int | None = Header(None, alias="X-User-Id"),
@@ -138,13 +139,18 @@ async def patch_user_roles(
                 )
             seen[role_id] = ("remove", i)
 
-        updated_roles = await user_service.update_roles(
+        updated_roles = await user_action.update_user_roles(
             user_id=target_user_id,
-            set_data=[
-                {"user_id": target_user_id, "role_id": x.role_id, "effect": x.effect}
-                for x in payload.set
-            ],
-            remove_ids=payload.remove,
+            user_roles_patch=UserRolesPatch(
+                set=[
+                    UserRoleType(
+                        user_id=target_user_id,
+                        role_id=x.role_id,
+                        effect=x.effect,
+                    ) for x in payload.set
+                ],
+                remove=payload.remove,
+            ),
         )
 
         return UserRoles.model_validate({
@@ -155,14 +161,14 @@ async def patch_user_roles(
 
 @router.get("/{target_user_id}/permissions", response_model=UserPermissions)
 async def get_user_permissions(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         user_id: int | None = Header(None, alias="X-User-Id"),
         page: int = Query(default=1, ge=1),
         size: int = Query(default=100, ge=1, le=100),
 ) -> UserPermissions:
     with logger.contextualize(user_id=user_id):
-        permissions, total = await user_service.get_permissions(
+        permissions, total = await user_action.get_user_permissions(
             user_id=target_user_id,
             page=page,
             size=size,
@@ -178,7 +184,7 @@ async def get_user_permissions(
 
 @router.patch("/{target_user_id}/permissions", response_model=UserPermissions)
 async def patch_user_permissions(
-        user_service: FromDishka[UserService],
+        user_action: FromDishka[UserAction],
         target_user_id: int,
         payload: UserPermissionsUpdate,
         user_id: int | None = Header(None, alias="X-User-Id"),
@@ -202,13 +208,17 @@ async def patch_user_permissions(
                 )
             seen[permission_id] = ("remove", i)
 
-        updated_permissions = await user_service.update_permissions(
+        updated_permissions = await user_action.update_user_permissions(
             user_id=target_user_id,
-            set_data=[
-                {"user_id": target_user_id, "permission_id": x.permission_id, "effect": x.effect}
-                for x in payload.set
-            ],
-            remove_ids=payload.remove,
+            user_permissions_patch=UserPermissionsPatch(
+                set=[
+                    UserPermissionType(
+                        user_id=target_user_id,
+                        permission_id=x.permission_id,
+                        effect=x.effect,
+                    ) for x in payload.set],
+                remove=payload.remove,
+            ),
         )
 
         return UserPermissions.model_validate({

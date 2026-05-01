@@ -1,15 +1,19 @@
+from .auth_repository import AuthRepository
 from .permission_repository import PermissionRepository
 from .role_permission_repository import RolePermissionRepository
 from .role_repository import RoleRepository
+from .session_repository import SessionRepository
 from .token_repository import TokenRepository
 from .user_permission_repository import UserPermissionRepository
 from .user_repository import UserRepository
 from .user_role_repository import UserRoleRepository
 
 __all__ = [
+    "AuthRepository",
     "PermissionRepository",
     "RolePermissionRepository",
     "RoleRepository",
+    "SessionRepository",
     "TokenRepository",
     "UserPermissionRepository",
     "UserRepository",

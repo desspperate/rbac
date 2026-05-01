@@ -7,7 +7,7 @@ from rbac.constants import RBACConstants
 from rbac.database import Base
 
 if TYPE_CHECKING:
-    from rbac.models import Permission, Role, Token
+    from rbac.models import Permission, Role, Session
 
 
 class User(Base):
@@ -20,8 +20,8 @@ class User(Base):
         nullable=False,
     )
 
-    tokens: Mapped[list["Token"]] = relationship(
-        "Token",
+    sessions: Mapped[list["Session"]] = relationship(
+        "Session",
         back_populates="user",
         cascade="all, delete-orphan",
     )

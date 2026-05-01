@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,16 +24,16 @@ class PermissionCreate(PermissionBase):
 
 
 class PermissionUpdate(BaseModel):
-    codename: str | None = Field(
-        None,
+    codename: Annotated[str, Field(
+        default=None,
         pattern=RBACConstants.PERMISSION_CODENAME_PATTERN,
         max_length=RBACConstants.PERMISSION_CODENAME_MAX_LEN,
-    )
-    description: str | None = Field(
-        None,
+    )]
+    description: Annotated[str | None, Field(
+        default=None,
         max_length=RBACConstants.PERMISSION_DESCRIPTION_MAX_LEN,
         pattern=RBACConstants.DESCRIPTION_PATTERN,
-    )
+    )]
 
 
 class PermissionRead(PermissionBase):

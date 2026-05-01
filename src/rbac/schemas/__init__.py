@@ -1,3 +1,10 @@
+from .auth_schemas import (
+    LoginRequest,
+    MeResponse,
+    RefreshRequest,
+    RegisterRequest,
+    TokenPair,
+)
 from .permission_schemas import PermissionCreate, PermissionRead, PermissionsRead, PermissionUpdate
 from .role_schemas import (
     RoleCreate,
@@ -8,6 +15,7 @@ from .role_schemas import (
     RolesRead,
     RoleUpdate,
 )
+from .session_schemas import SessionCreate, SessionRead, SessionsRead, SessionUpdate
 from .token_schemas import TokenBase, TokenCreate, TokenPrivateRead, TokenRead, TokensRead, TokenUpdate
 from .user_schemas import (
     UserCreate,
@@ -25,10 +33,14 @@ from .user_schemas import (
 )
 
 __all__ = [
+    "LoginRequest",
+    "MeResponse",
     "PermissionCreate",
     "PermissionRead",
     "PermissionUpdate",
     "PermissionsRead",
+    "RefreshRequest",
+    "RegisterRequest",
     "RoleCreate",
     "RolePermissionUpdate",
     "RolePermissions",
@@ -36,8 +48,13 @@ __all__ = [
     "RoleRead",
     "RoleUpdate",
     "RolesRead",
+    "SessionCreate",
+    "SessionRead",
+    "SessionUpdate",
+    "SessionsRead",
     "TokenBase",
     "TokenCreate",
+    "TokenPair",
     "TokenPrivateRead",
     "TokenRead",
     "TokenUpdate",

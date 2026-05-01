@@ -24,5 +24,6 @@ ENV PYTHONPATH="/app/src"
 
 CMD ["gunicorn", \
      "-k", "uvicorn.workers.UvicornWorker", \
+     "--workers", "4", \
      "rbac.main:app", \
      "--bind", "0.0.0.0:80"]
