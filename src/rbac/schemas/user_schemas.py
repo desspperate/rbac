@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from rbac.constants import RBACConstants
 from rbac.enums import PolicyEffectEnum
@@ -15,26 +16,27 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: str = Field(
+    password: SecretStr = Field(
         min_length=RBACConstants.USER_PASSWORD_MIN_LEN,
         max_length=RBACConstants.USER_PASSWORD_MAX_LEN,
     )
 
 
 class UserUpdate(BaseModel):
-    username: str | None = Field(
+    username: Annotated[str, Field(
         default=None,
         pattern=RBACConstants.USER_USERNAME_PATTERN,
         max_length=RBACConstants.USER_USERNAME_MAX_LEN,
-    )
-    password: str | None = Field(
+    )]
+    password: Annotated[SecretStr, Field(
         default=None,
         min_length=RBACConstants.USER_PASSWORD_MIN_LEN,
         max_length=RBACConstants.USER_PASSWORD_MAX_LEN,
-    )
+    )]
 
 
 class UserRead(UserBase):
+    password_hash: str
     id: int
     created_at: datetime
     updated_at: datetime | None
@@ -69,8 +71,8 @@ class UserRoleUpdate(UserRoleBase):
 
 
 class UserRolesUpdate(BaseModel):
-    set: list[UserRoleUpdate] = Field(default_factory=list[UserRoleUpdate])
-    remove: list[int] = Field(default_factory=list[int])
+    set: Sequence[UserRoleUpdate] = Field(default_factory=Sequence[UserRoleUpdate])
+    remove: Sequence[int] = Field(default_factory=Sequence[int])
 
 
 class UserPermissionBase(BaseModel):
@@ -93,5 +95,5 @@ class UserPermissionUpdate(UserPermissionBase):
 
 
 class UserPermissionsUpdate(BaseModel):
-    set: list[UserPermissionUpdate] = Field(default_factory=list[UserPermissionUpdate])
-    remove: list[int] = Field(default_factory=list[int])
+    set: Sequence[UserPermissionUpdate] = Field(default_factory=Sequence[UserPermissionUpdate])
+    remove: Sequence[int] = Field(default_factory=Sequence[int])

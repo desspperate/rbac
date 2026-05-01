@@ -1,29 +1,30 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretBytes
 
 from rbac.constants import RBACConstants
 from rbac.enums import ForcedTokenStatusEnum, TokenTypeEnum
 
 
 class TokenBase(BaseModel):
-    user_id: int
+    session_id: int
     token_type: TokenTypeEnum
     forced_status: ForcedTokenStatusEnum | None = None
 
 
 class TokenCreate(TokenBase):
-    token_value: bytes | None = None
+    token_value: SecretBytes | None = None
     expires_at: datetime | None = None
 
 
 class TokenUpdate(BaseModel):
-    user_id: int | None = None
-    token_type: TokenTypeEnum | None = None
-    forced_status: ForcedTokenStatusEnum | None = None
-    token_value: bytes | None = None
-    expires_at: datetime | None = None
+    session_id: Annotated[int, Field(default=None)]
+    token_type: Annotated[TokenTypeEnum, Field(default=None)]
+    forced_status: Annotated[ForcedTokenStatusEnum | None, Field(default=None)]
+    token_value: Annotated[SecretBytes, Field(default=None)]
+    expires_at: Annotated[datetime, Field(default=None)]
 
 
 class TokenRead(TokenBase):
@@ -42,3 +43,6 @@ class TokenPrivateRead(TokenRead):
 
 class TokensRead(BaseModel):
     tokens: Sequence[TokenRead]
+    page: int
+    page_size: int
+    total: int

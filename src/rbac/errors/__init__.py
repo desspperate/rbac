@@ -1,3 +1,4 @@
+from .auth_errors import InvalidCredentialsError, TokenExpiredError, TokenMismatchError, TokenRevokedError
 from .permission_errors import (
     BasePermissionError,
     PermissionCodenameConflictError,
@@ -7,6 +8,7 @@ from .permission_errors import (
     PermissionNotDeletedError,
     PermissionNotFoundError,
     PermissionsNotFoundError,
+    PermissionStillReferencedError,
 )
 from .rbac_errors import (
     RBACBusinessLogicError,
@@ -30,19 +32,30 @@ from .role_errors import (
     RolesNotFoundError,
     RoleStillReferencedError,
 )
+from .session_errors import (
+    SessionIpAddressNullError,
+    SessionNotFoundByIDError,
+    SessionNotFoundError,
+    SessionStillReferencedError,
+    SessionUserAgentNullError,
+    SessionUserIdNullError,
+)
 from .token_errors import (
+    ActiveTokenAlreadyExistsError,
     TokenExpiresAtNullError,
-    TokenNotFoundError,
+    TokenNotFoundByIDError,
+    TokenNotFoundByTokenHashError,
+    TokenSessionIdNullError,
     TokenTokenHashAlreadyExistError,
     TokenTokenHashNullError,
     TokenTokenTypeNullError,
-    TokenUserIdNullError,
     UnsupportedTokenTypeError,
 )
 from .unhandled_integrity_error import UnhandledIntegrityError
 from .user_errors import (
     UserError,
-    UserNotFoundError,
+    UserNotFoundByIDError,
+    UserNotFoundByUsernameError,
     UserPasswordNullError,
     UserPermissionsUpdateIntersectingDeltaError,
     UserRolesUpdateIntersectingDeltaError,
@@ -53,13 +66,16 @@ from .user_errors import (
 )
 
 __all__ = [
+    "ActiveTokenAlreadyExistsError",
     "BasePermissionError",
+    "InvalidCredentialsError",
     "PermissionCodenameConflictError",
     "PermissionCodenameInvalidError",
     "PermissionCodenameNullError",
     "PermissionDescriptionInvalidError",
     "PermissionNotDeletedError",
     "PermissionNotFoundError",
+    "PermissionStillReferencedError",
     "PermissionsNotFoundError",
     "RBACBusinessLogicError",
     "RBACConflictError",
@@ -79,16 +95,27 @@ __all__ = [
     "RolePermissionsUpdateIntersectingDeltaError",
     "RoleStillReferencedError",
     "RolesNotFoundError",
+    "SessionIpAddressNullError",
+    "SessionNotFoundByIDError",
+    "SessionNotFoundError",
+    "SessionStillReferencedError",
+    "SessionUserAgentNullError",
+    "SessionUserIdNullError",
+    "TokenExpiredError",
     "TokenExpiresAtNullError",
-    "TokenNotFoundError",
+    "TokenMismatchError",
+    "TokenNotFoundByIDError",
+    "TokenNotFoundByTokenHashError",
+    "TokenRevokedError",
+    "TokenSessionIdNullError",
     "TokenTokenHashAlreadyExistError",
     "TokenTokenHashNullError",
     "TokenTokenTypeNullError",
-    "TokenUserIdNullError",
     "UnhandledIntegrityError",
     "UnsupportedTokenTypeError",
     "UserError",
-    "UserNotFoundError",
+    "UserNotFoundByIDError",
+    "UserNotFoundByUsernameError",
     "UserPasswordNullError",
     "UserPermissionsUpdateIntersectingDeltaError",
     "UserRolesUpdateIntersectingDeltaError",

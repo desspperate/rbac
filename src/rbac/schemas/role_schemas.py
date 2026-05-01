@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,16 +25,16 @@ class RoleCreate(RoleBase):
 
 
 class RoleUpdate(BaseModel):
-    name: str | None = Field(
+    name: Annotated[str, Field(
         default=None,
         pattern=RBACConstants.ROLE_NAME_PATTERN,
         max_length=RBACConstants.ROLE_NAME_MAX_LEN,
-    )
-    description: str | None = Field(
+    )]
+    description: Annotated[str | None, Field(
         default=None,
         max_length=RBACConstants.ROLE_DESCRIPTION_MAX_LEN,
         pattern=RBACConstants.DESCRIPTION_PATTERN,
-    )
+    )]
 
 class RoleRead(RoleBase):
     id: int
@@ -70,5 +71,5 @@ class RolePermissionUpdate(RolePermissionBase):
 
 
 class RolePermissionsUpdate(BaseModel):
-    set: list[RolePermissionUpdate] = Field(default_factory=list[RolePermissionUpdate])
-    remove: list[int] = Field(default_factory=list[int])
+    set: Sequence[RolePermissionUpdate] = Field(default_factory=list[RolePermissionUpdate])
+    remove: Sequence[int] = Field(default_factory=list[int])

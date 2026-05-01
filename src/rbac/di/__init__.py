@@ -2,10 +2,12 @@ from dishka import AsyncContainer, make_async_container
 
 from rbac.configs import RBACConfig
 
+from .auth_provider import AuthProvider
 from .kdb_provider import KDBProvider
 from .permission_provider import PermissionProvider
 from .pg_config_provider import PGConfigProvider
 from .role_provider import RoleProvider
+from .session_provider import SessionProvider
 from .sqlalchemy_provider import SqlalchemyProvider
 from .token_provider import TokenProvider
 from .user_provider import UserProvider
@@ -19,6 +21,8 @@ def make_rbac_container(rbac_config_instance: RBACConfig) -> AsyncContainer:
         RoleProvider(),
         UserProvider(),
         PermissionProvider(),
+        SessionProvider(),
         TokenProvider(),
+        AuthProvider(),
         context={RBACConfig: rbac_config_instance},
     )

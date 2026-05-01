@@ -5,8 +5,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rbac.enums import PolicyEffectEnum
 from rbac.models import UserRole
+from rbac.types import UserRoleType
 from rbac.utils import BaseRepository
 
 
@@ -14,7 +14,7 @@ class UserRoleRepository(BaseRepository[UserRole]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session=session, model=UserRole)
 
-    async def upsert_user_roles(self, set_data: Sequence[dict[str, int | PolicyEffectEnum]]) -> None:
+    async def upsert_user_roles(self, set_data: Sequence[UserRoleType]) -> None:
         if not set_data:
             logger.warning("No roles provided to upsert user roles")
             return

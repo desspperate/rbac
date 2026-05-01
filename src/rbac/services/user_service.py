@@ -4,27 +4,28 @@ from contextlib import asynccontextmanager
 from asyncpg import CheckViolationError, NotNullViolationError, UniqueViolationError
 from asyncpg.exceptions import ForeignKeyViolationError
 from loguru import logger
+from pydantic import SecretStr
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from rbac.constants import RBACConstants
-from rbac.enums import PolicyEffectEnum
 from rbac.errors import (
     PermissionNotFoundError,
     PermissionsNotFoundError,
     RoleNotFoundError,
     RolesNotFoundError,
     UnhandledIntegrityError,
-    UserNotFoundError,
+    UserNotFoundByIDError,
+    UserNotFoundByUsernameError,
     UserPasswordNullError,
     UserStillReferencedError,
     UserUsernameAlreadyExistError,
     UserUsernameInvalidError,
     UserUsernameNullError,
 )
-from rbac.models import Token, User, UserPermission, UserRole
+from rbac.models import Session, User, UserPermission, UserRole
 from rbac.repositories import UserPermissionRepository, UserRepository, UserRoleRepository
-from rbac.utils import UNSET, HandleIntegrityHelpers, Unset, crypto_hash, get_asyncpg_error
+from rbac.types import UserPatch, UserPermissionsPatch, UserRolesPatch
+from rbac.utils import HandleIntegrityHelpers, crypto_hash, get_asyncpg_error
 
 
 @asynccontextmanager
@@ -48,7 +49,7 @@ async def handle_user_integrity(username: str | None) -> AsyncIterator[None]:
                 _, failed_value, referrer_table = HandleIntegrityHelpers.get_details(asyncpg_error, e)
 
                 if constraint in {
-                    Token.FK_TOKEN_USER_ID,
+                    Session.FK_SESSION_USER_ID,
                     UserRole.FK_USER_ROLE_USER_ID,
                     UserPermission.FK_USER_PERMISSION_USER_ID,
                 }:
@@ -82,7 +83,7 @@ async def handle_user_role_integrity() -> AsyncIterator[None]:
             _, failed_value, _ = HandleIntegrityHelpers.get_details(asyncpg_error, e)
 
             if constraint == UserRole.FK_USER_ROLE_USER_ID:
-                raise UserNotFoundError(user_id=failed_value) from e
+                raise UserNotFoundByIDError(user_id=failed_value) from e
             if constraint == UserRole.FK_USER_ROLE_ROLE_ID:
                 raise RoleNotFoundError(role_id=failed_value) from e
 
@@ -104,7 +105,7 @@ async def handle_user_permission_integrity() -> AsyncIterator[None]:
             _, failed_value, _ = HandleIntegrityHelpers.get_details(asyncpg_error, e)
 
             if constraint == UserPermission.FK_USER_PERMISSION_USER_ID:
-                raise UserNotFoundError(user_id=failed_value) from e
+                raise UserNotFoundByIDError(user_id=failed_value) from e
             if constraint == UserPermission.FK_USER_PERMISSION_PERMISSION_ID:
                 raise PermissionNotFoundError(permission_id=failed_value) from e
 
@@ -114,12 +115,10 @@ async def handle_user_permission_integrity() -> AsyncIterator[None]:
 class UserService:
     def __init__(
             self,
-            session: AsyncSession,
             user_repository: UserRepository,
             user_role_repository: UserRoleRepository,
             user_permission_repository: UserPermissionRepository,
     ) -> None:
-        self.session = session
         self.user_repository = user_repository
         self.user_role_repository = user_role_repository
         self.user_permission_repository = user_permission_repository
@@ -127,18 +126,15 @@ class UserService:
     async def create_user(
             self,
             username: str,
-            password: str,
+            password: SecretStr,
     ) -> User:
-        logger.info(f"Creating user: username='{username}'")
-        password_hash = crypto_hash(password)
+        logger.info(f"Creating user with username '{username}'")
+        password_hash = await crypto_hash(password.get_secret_value())
         async with handle_user_integrity(username=username):
-            user = await self.user_repository.create_user(
+            return await self.user_repository.create_user(
                 username=username,
                 password_hash=password_hash,
             )
-            await self.session.commit()
-        logger.info(f"User created: {user.id}")
-        return user
 
     async def get_users(self, page: int, size: int) -> tuple[Sequence[User], int]:
         logger.info(f"Getting users for page: {page}, size: {size}")
@@ -147,7 +143,7 @@ class UserService:
     async def get_user(self, user_id: int) -> User:
         logger.info(f"Getting user: {user_id}")
         if (user := await self.user_repository.get_by_id(user_id)) is None:
-            raise UserNotFoundError(user_id=user_id)
+            raise UserNotFoundByIDError(user_id=user_id)
         return user
 
     async def delete_user(self, user_id: int) -> None:
@@ -155,44 +151,39 @@ class UserService:
         async with handle_user_integrity(username=None):
             deleted = await self.user_repository.delete_by_id(user_id)
         if not deleted:
-            raise UserNotFoundError(user_id=user_id)
-        await self.session.commit()
-        logger.info(f"User deleted: {user_id}")
+            raise UserNotFoundByIDError(user_id=user_id)
 
     async def update_user(
             self,
             user_id: int,
-            username: str | Unset = UNSET,
-            password: str | Unset = UNSET,
+            user_patch: UserPatch,
     ) -> User:
         logger.info(f"Updating user: {user_id}")
-        user = await self.get_user(user_id)
 
-        if not isinstance(username, Unset):
-            user.username = username
-        if not isinstance(password, Unset):
-            user.password_hash = crypto_hash(password)
+        password = user_patch.pop("password", None)
+        if isinstance(password, SecretStr):
+            user_patch["password_hash"] = await crypto_hash(password.get_secret_value())
 
-        async with handle_user_integrity(username=username if not isinstance(username, Unset) else None):
-            await self.session.commit()
-        await self.session.refresh(user)
-        logger.info(f"User updated: {user_id}")
-        return user
+        async with handle_user_integrity(username=user_patch.get("username")):
+            return await self.user_repository.update_user(
+                user_id=user_id,
+                user_patch=user_patch,
+            )
 
-    async def update_roles(
+    async def update_user_roles(
             self,
             user_id: int,
-            set_data: list[dict[str, int | PolicyEffectEnum]],
-            remove_ids: Sequence[int],
+            user_roles_patch: UserRolesPatch,
     ) -> Sequence[UserRole]:
         logger.info(f"Updating roles for user: {user_id}")
         async with handle_user_role_integrity():
-            not_deleted = await self.user_role_repository.remove_user_roles(user_id=user_id, remove_ids=remove_ids)
+            not_deleted = await self.user_role_repository.remove_user_roles(
+                user_id=user_id,
+                remove_ids=user_roles_patch.get("remove", []),
+            )
             if not_deleted:
                 raise RolesNotFoundError(role_ids=not_deleted)
-            await self.user_role_repository.upsert_user_roles(set_data=set_data)
-            await self.session.commit()
-        logger.info(f"Roles updated for user: {user_id}")
+            await self.user_role_repository.upsert_user_roles(set_data=user_roles_patch.get("set", {}))
         return await self.user_role_repository.get_user_roles(user_id=user_id)
 
     async def get_roles(self, user_id: int, page: int, size: int) -> tuple[Sequence[UserRole], int]:
@@ -203,23 +194,22 @@ class UserService:
             user_id=user_id,
         )
 
-    async def update_permissions(
+    async def update_user_permissions(
             self,
             user_id: int,
-            set_data: list[dict[str, int | PolicyEffectEnum]],
-            remove_ids: Sequence[int],
+            user_permissions_patch: UserPermissionsPatch,
     ) -> Sequence[UserPermission]:
         logger.info(f"Updating permissions for user: {user_id}")
         async with handle_user_permission_integrity():
             not_deleted = await self.user_permission_repository.remove_user_permissions(
                 user_id=user_id,
-                remove_ids=remove_ids,
+                remove_ids=user_permissions_patch.get("remove", []),
             )
             if not_deleted:
                 raise PermissionsNotFoundError(permission_ids=not_deleted)
-            await self.user_permission_repository.upsert_user_permissions(set_data=set_data)
-            await self.session.commit()
-        logger.info(f"Permissions updated for user: {user_id}")
+            await self.user_permission_repository.upsert_user_permissions(
+                set_data=user_permissions_patch.get("set", {}),
+            )
         return await self.user_permission_repository.get_user_permissions(user_id=user_id)
 
     async def get_permissions(self, user_id: int, page: int, size: int) -> tuple[Sequence[UserPermission], int]:
@@ -229,3 +219,9 @@ class UserService:
             limit=size,
             user_id=user_id,
         )
+
+    async def find_by_username(self, username: str) -> User:
+        logger.info(f"Finding user with username: {username}")
+        if (user := await self.user_repository.get_by_username(username=username)) is None:
+            raise UserNotFoundByUsernameError(username=username)
+        return user

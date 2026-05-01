@@ -5,8 +5,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rbac.enums import PolicyEffectEnum
 from rbac.models import UserPermission
+from rbac.types import UserPermissionType
 from rbac.utils import BaseRepository
 
 
@@ -14,7 +14,7 @@ class UserPermissionRepository(BaseRepository[UserPermission]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session=session, model=UserPermission)
 
-    async def upsert_user_permissions(self, set_data: Sequence[dict[str, int | PolicyEffectEnum]]) -> None:
+    async def upsert_user_permissions(self, set_data: Sequence[UserPermissionType]) -> None:
         if not set_data:
             logger.warning("No permissions provided to upsert user permissions")
             return

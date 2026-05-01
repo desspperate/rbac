@@ -5,8 +5,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rbac.enums import PolicyEffectEnum
 from rbac.models import RolePermission
+from rbac.types.role_types import RolePermissionType
 from rbac.utils import BaseRepository
 
 
@@ -30,7 +30,7 @@ class RolePermissionRepository(BaseRepository[RolePermission]):
         removed_ids = result.scalars().all()
         return list(set(remove_ids) - set(removed_ids))
 
-    async def upsert_role_permissions(self, set_data: Sequence[dict[str, int | PolicyEffectEnum]]) -> None:
+    async def upsert_role_permissions(self, set_data: Sequence[RolePermissionType]) -> None:
         if not set_data:
             logger.warning("No permissions provided to upsert role permissions")
             return

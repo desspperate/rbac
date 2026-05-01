@@ -35,7 +35,8 @@ class SqlalchemyProvider(Provider):
     ) -> AsyncIterable[AsyncSession]:
         async with database_session_maker() as session:
             try:
-                yield session
+                with logger.contextualize(session_id=id(session)):
+                    yield session
             except Exception:
                 await session.rollback()
                 raise
